@@ -1,4 +1,5 @@
 ﻿using Emgu.CV;
+using Emgu.CV.CvEnum;
 using Emgu.CV.Features2D;
 using Emgu.CV.Structure;
 using Emgu.CV.UI;
@@ -9,43 +10,163 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
-
 namespace EmguCVTest
 {
+    public class KeyFrame
+    {
+        public Image<Bgr, Byte> Frame { get; set; }
+        public VectorOfKeyPoint KeyPoints { get; set; }
+    }
     class Program
     {
-        public class KeyFrame
-        {
-            public Image<Bgr, Byte> Frame      { get; set; }
-            public VectorOfKeyPoint KeyPoints  { get; set; }
-        }
+        static List<KeyFrame> keyFrames = new List<KeyFrame>();
+        [STAThread]
         static void Main(string[] args)
         {
             try
             {
-                ImageViewer viewer = new ImageViewer();
-                Capture capture = new Capture(0);
-                //FastDetector detector = new FastDetector(10);
-                Image<Bgr, Byte> lastFrame = null;
-                
-                List<KeyFrame> keyFrames = new List<KeyFrame>();
+                choose:
+                Console.WriteLine("For camera press 1, for video press 2");
+                int choose = -1;
+                int.TryParse(Console.ReadLine(), out choose);
+                Console.WriteLine("Without Keyframes press 1, With Keyframes press 2");
+                int chooseKF = -1;
+                int.TryParse(Console.ReadLine(), out chooseKF);
+                if (choose == 1)
+                {
+                    if (chooseKF == 1)
+                        withoutKeyframes(true);
+                    else if (chooseKF == 2)
+                        withKeyframes(false);
+                    else
+                        goto choose;
+                }
+                else if (choose == 2)
+                {
+                    OpenFileDialog OF = new OpenFileDialog();
+                    OF.ShowDialog();
+                    if (chooseKF == 1)
+                        withoutKeyframes(true, OF.FileName);
+                    else if (chooseKF == 2)
+                        withKeyframes(false, OF.FileName);
+                    else
+                        goto choose;
+                }
+                else
+                    goto choose;
+                //withKeyframes();
+            }
+            catch (Exception ex)
+            {
+
+            }
+        }
+        private static void withoutKeyframes(bool isFast,string videoSource = null)
+        {
+            ImageViewer viewer = new ImageViewer();
+            try
+            {
+                Capture capture     = videoSource != null ? new Capture(videoSource) : new Capture(0);
+                Image<Bgr, Byte> lastFrame = null, result  = null;
+                Application.Idle   += new EventHandler(delegate (object sender, EventArgs e)
+                {
+                    IDrawer drawer;
+                    if (isFast)
+                        drawer = new FastDrawer();
+                    else
+                        drawer = new SURFDrawer();
+                    try
+                    {
+                        Mat frame = capture.QueryFrame();
+                        if (frame.Width > 720 || frame.Height > 480)
+                        {
+                            double width = 720.0 / frame.Width;
+                            double height = 480.0 / frame.Height;
+
+                            CvInvoke.Resize(frame, frame, new Size(), width, height, Inter.Linear);
+                        }
+                        result = frame.ToImage<Bgr,Byte>();
+                        if (lastFrame != null)
+                            result = drawer.FindMatch(frame.ToImage<Bgr, Byte>(), lastFrame).Draw(frame.ToImage<Bgr,Byte>(), lastFrame);
+
+                        lastFrame    = frame.ToImage<Bgr, Byte>();
+                        viewer.Width = frame.Width * 2 + 50;
+                        viewer.Image = result;
+                        //result.Dispose();
+                    }
+                    catch (Exception ex1)
+                    {
+
+                    }
+                    finally
+                    {
+                        result.Dispose();
+                        drawer.Dispose();
+                    }
+                });
+
+            }
+            catch (Exception ex)
+            {
+
+            }
+            viewer.ShowDialog();
+        }
+        private static void withKeyframes(bool isFast, string videoSource = null)
+        {
+            ImageViewer viewer = new ImageViewer();
+            try
+            {
+                Capture capture = videoSource != null ? new Capture(videoSource) : new Capture(0);
+                Image<Bgr, Byte> result = null, keyFrame = null;
+
                 Application.Idle += new EventHandler(delegate (object sender, EventArgs e)
                 {
-                    Image<Bgr, Byte> result = null;
-                    //FastDrawer drawer = new FastDrawer();
-                    if (keyFrames.Count < 45)
+                    if (keyFrames.Count < 15)
+                    {
+                        IDrawer drawer;
+                        if (isFast)
+                            drawer = new FastDrawer();
+                        else
+                            drawer = new SURFDrawer();
                         try
                         {
                             Mat frame = capture.QueryFrame();
-                            result = frame.ToImage<Bgr, Byte>();
-                            //VectorOfKeyPoint keypoints = new VectorOfKeyPoint(detector.Detect(result));
-                            //Features2DToolbox.DrawKeypoints(result, keypoints, result, new Bgr(System.Drawing.Color.Red), Features2DToolbox.KeypointDrawType.Default);
-                            if (lastFrame != null)
-                                result = /*drawer.*/Draw(lastFrame, result, keyFrames);
-                            else
-                                keyFrames.Add(new KeyFrame() { Frame = frame.ToImage<Bgr, Byte>() });
+                            if (frame.Width > 720 || frame.Height > 480)
+                            {
+                                double width = 720.0 / frame.Width;
+                                double height = 480.0 / frame.Height;
 
-                            lastFrame = keyFrames.LastOrDefault().Frame;/* frame.ToImage<Bgr, Byte>();*/
+                                CvInvoke.Resize(frame, frame, new Size(), width, height, Inter.Linear);
+                            }
+                            Image<Bgr, Byte> framebuffer = frame.ToImage<Bgr, Byte>();
+                            if (keyFrames.Count == 0)
+                                keyFrames.Add(new KeyFrame() { Frame = framebuffer });
+                            for (int i = 0; i < keyFrames.Count; i++)
+                            {
+                                KeyFrame kf = keyFrames[i];
+                                drawer.FindMatch(kf.Frame, framebuffer, keyFrames);
+                                if (drawer.homography != null)
+                                {
+                                    keyFrame = kf.Frame;
+                                    break;
+                                }
+                                drawer.Clear();
+                            }
+                            //foreach (KeyFrame kf in keyFrames.ToList())
+                            //{
+                            //    drawer.FindMatch(kf.Frame, framebuffer, keyFrames);
+                            //    if (drawer.homography != null)
+                            //    {
+                            //        keyFrame = kf.Frame;
+                            //        break;
+                            //    }
+                            //    drawer.Clear();
+                            //}
+                            result = frame.ToImage<Bgr, Byte>();
+                            if(keyFrame != null)
+                                result = drawer.Draw(keyFrame, framebuffer);
+                            
                             viewer.Width = frame.Width * 2 + 50;
                             viewer.Image = result;
                             //result.Dispose();
@@ -57,36 +178,27 @@ namespace EmguCVTest
                         finally
                         {
                             result.Dispose();
-                            //drawer.Dispose();
+                            drawer.Dispose();
                         }
+                    }
                     else
                     {
-                        //Image<Bgr, Byte> _newImage = keyFrames[0].Frame;
-                        //for (int i = 1; i < keyFrames.Count; i++)
-                        //{
-                        //    _newImage = newImage(_newImage, keyFrames[i].Frame);
-                        //}
-                        //viewer.Size = _newImage.Size;
-                        //viewer.Image = _newImage;
-                        keyFrames.RemoveRange(0, keyFrames.Count/2);
+                        keyFrames.RemoveRange(0, keyFrames.Count / 2);
                     }
                 });
-                    viewer.ShowDialog(); 
-
             }
-            catch (Exception ex)
+            catch
             {
 
             }
+            viewer.ShowDialog();
         }
-
-
 
         public static Image<Bgr, Byte> Draw(Image<Bgr, Byte> modelImage, Image<Bgr, Byte> observedImage, List<KeyFrame> keyFrames)
         {
             Mat homography = null;
 
-            FastDetector fastCPU = new FastDetector(25);
+            FastDetector fastCPU = new FastDetector(55);
             VectorOfKeyPoint modelKeyPoints;
             VectorOfKeyPoint observedKeyPoints;
             VectorOfVectorOfDMatch indices = new VectorOfVectorOfDMatch();
@@ -109,8 +221,7 @@ namespace EmguCVTest
             KeyFrame kf = keyFrames.Where(x => x.KeyPoints == observedKeyPoints).FirstOrDefault();
             if (modelKeyPoints.Size == 0 && observedKeyPoints.Size > 3 && kf == null)
                 keyFrames.Add(new KeyFrame() { Frame = observedImage.Clone(), KeyPoints = observedKeyPoints });
-            else if(kf != null)
-                modelImage = kf.Frame;
+
             if (modelKeyPoints.Size == 0 || observedKeyPoints.Size == 0)
                 return observedImage;
             BFMatcher matcher = new BFMatcher(DistanceType.L2);
@@ -119,19 +230,21 @@ namespace EmguCVTest
 
             matcher.KnnMatch(observedDescriptors, indices, k, null);
             mask = new Mat(observedDescriptors.Size, observedDescriptors.Depth, observedDescriptors.NumberOfChannels);
-            mask.SetTo(new MCvScalar(255));
+            mask.SetTo(new MCvScalar(0));
             Features2DToolbox.VoteForUniqueness(indices, uniquenessThreshold, mask);
 
 
             int nonZeroCount = CvInvoke.CountNonZero(mask);
-            if (nonZeroCount >= 5)
+            if (nonZeroCount >= 4)
             {
                 nonZeroCount = Features2DToolbox.VoteForSizeAndOrientation(modelKeyPoints, observedKeyPoints, indices, mask, 1.5, 20);
-                if (nonZeroCount >= 5)
+                if (nonZeroCount >= 4)
                     homography = Features2DToolbox.GetHomographyMatrixFromMatchedFeatures(modelKeyPoints, observedKeyPoints, indices, mask, 2);
                 else
                     keyFrames.Add(new KeyFrame() { Frame = observedImage.Clone(), KeyPoints = observedKeyPoints });
             }
+            else
+                keyFrames.Add(new KeyFrame() { Frame = observedImage.Clone(), KeyPoints = observedKeyPoints });
 
             //Draw the matched keypoints
             Mat result = new Mat();
