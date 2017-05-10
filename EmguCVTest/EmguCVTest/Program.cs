@@ -14,8 +14,16 @@ namespace EmguCVTest
 {
     public class KeyFrame
     {
-        public Image<Bgr, Byte> Frame { get; set; }
-        public VectorOfKeyPoint KeyPoints { get; set; }
+        public Image<Bgr, Byte> Frame       { get; set; }
+        public VectorOfKeyPoint KeyPoints   { get; set; }
+        public Mat              Descriptors { get; set; }
+        public PointF[]         GetKeypointPoints()
+        {
+            PointF[] arr = new PointF[KeyPoints.Size];
+            for (int i = 0; i < KeyPoints.Size; i++)
+                arr[i] = KeyPoints[i].Point;
+            return arr;
+        }
     }
     class Program
     {
@@ -118,7 +126,8 @@ namespace EmguCVTest
             try
             {
                 Capture capture = videoSource != null ? new Capture(videoSource) : new Capture(0);
-                Image<Bgr, Byte> result = null, keyFrame = null;
+                Image<Bgr, Byte> result = null;
+                KeyFrame keyFrame = null;
 
                 Application.Idle += new EventHandler(delegate (object sender, EventArgs e)
                 {
@@ -142,27 +151,28 @@ namespace EmguCVTest
                             Image<Bgr, Byte> framebuffer = frame.ToImage<Bgr, Byte>();
                             if (keyFrames.Count == 0)
                                 keyFrames.Add(new KeyFrame() { Frame = framebuffer });
-                            for (int i = 0; i < keyFrames.Count; i++)
+                            for (int i = keyFrames.Count-1; i >=0; i--)
                             {
                                 KeyFrame kf = keyFrames[i];
-                                drawer.FindMatch(kf.Frame, framebuffer, keyFrames);
+                                drawer.FindMatch(kf, framebuffer, keyFrames);
                                 if (drawer.homography != null)
                                 {
-                                    keyFrame = kf.Frame;
+                                    KeyFrame buffer_kf = keyFrames[keyFrames.Count - 1];
+                                    if (kf != buffer_kf)
+                                    {
+                                        keyFrames[i] = buffer_kf;
+                                        keyFrames[keyFrames.Count - 1] = kf;
+                                    }
+                                    keyFrame = kf;
                                     break;
+                                }
+                                if (i == 0)
+                                {
+                                    if (drawer.homography == null)
+                                        keyFrames.Add(new KeyFrame() { Frame = framebuffer, KeyPoints = drawer.observedKeyPoints, Descriptors = drawer.observedDescriptors });
                                 }
                                 drawer.Clear();
                             }
-                            //foreach (KeyFrame kf in keyFrames.ToList())
-                            //{
-                            //    drawer.FindMatch(kf.Frame, framebuffer, keyFrames);
-                            //    if (drawer.homography != null)
-                            //    {
-                            //        keyFrame = kf.Frame;
-                            //        break;
-                            //    }
-                            //    drawer.Clear();
-                            //}
                             result = frame.ToImage<Bgr, Byte>();
                             if(keyFrame != null)
                                 result = drawer.Draw(keyFrame, framebuffer);
