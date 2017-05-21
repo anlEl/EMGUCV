@@ -31,9 +31,7 @@ namespace EmguCVTest
         BFMatcher                   matcher              {get; set;}
         Mat                         result               {get; set;}
         void                        Clear                ();
-        IDrawer                     FindMatch            (Image<Bgr, Byte> modelImage, Image<Bgr, Byte> observedImage, List<KeyFrame> keyframes = null);
         IDrawer                     FindMatch            (KeyFrame keyFrame,           Image<Bgr, Byte> observedImage, List<KeyFrame> keyframes = null);
-        Image<Bgr, Byte>            Draw                 (Image<Bgr, Byte> modelImage, Image<Bgr, Byte> observedImage, List<KeyFrame> keyframes = null);
         Image<Bgr, Byte>            Draw                 (KeyFrame keyFrame, Image<Bgr, Byte> observedImage, List<KeyFrame> keyframes = null);
     }
     class SURFDrawer : IDrawer
@@ -104,52 +102,13 @@ namespace EmguCVTest
 
             return this;
         }
-        public IDrawer FindMatch(Image<Bgr, Byte> modelImage, Image<Bgr, Byte> observedImage, List<KeyFrame> keyframes = null)
-        {
-            
-            //extract features from the object image
-            modelKeyPoints = new VectorOfKeyPoint(CPU.Detect(modelImage));
-            descriptor.Compute(modelImage, modelKeyPoints, modelDescriptors);
-
-
-            // extract features from the observed image
-            observedKeyPoints = new VectorOfKeyPoint(CPU.Detect(observedImage));
-            descriptor.Compute(observedImage, observedKeyPoints, observedDescriptors);
-            matcher.Add(modelDescriptors);
-
-            matcher.KnnMatch(observedDescriptors, matches, k, null);
-            mask = new Mat(matches.Size, 1, DepthType.Cv8U, 1);
-            mask.SetTo(new MCvScalar(255));
-            Features2DToolbox.VoteForUniqueness(matches, uniquenessThreshold, mask);
-
-            int nonZeroCount = CvInvoke.CountNonZero(mask);
-            if (nonZeroCount >= 4)
-            {
-                nonZeroCount = Features2DToolbox.VoteForSizeAndOrientation(modelKeyPoints, observedKeyPoints,
-                   matches, mask, 1.5, 20);
-                if (nonZeroCount >= 4)
-                    homography = Features2DToolbox.GetHomographyMatrixFromMatchedFeatures(modelKeyPoints, observedKeyPoints, matches, mask, 2);
-
-                nonZeroCount = CvInvoke.CountNonZero(mask);
-
-                if (nonZeroCount < 9)
-                    homography = null;
-
-                //if (keyframes != null && homography == null)
-                //    keyframes.Add(new KeyFrame() { Frame = observedImage, KeyPoints = observedKeyPoints });
-            }
-
-            return this;
-        }
         public Image<Bgr, Byte> Draw(KeyFrame keyFrame, Image<Bgr, Byte> observedImage, List<KeyFrame> keyframes = null)
         {
 
-            //FindMatch(modelImage, observedImage, keyframes);
             if (matches.Size == mask.Rows)
                 Features2DToolbox.DrawMatches(keyFrame.Frame, keyFrame.KeyPoints, observedImage, observedKeyPoints, matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), mask, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
             else
                 Features2DToolbox.DrawMatches(keyFrame.Frame, keyFrame.KeyPoints, observedImage, observedKeyPoints, matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), null, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
-
             #region draw the projected region on the image
 
             if (homography != null)
@@ -177,41 +136,7 @@ namespace EmguCVTest
             //modelImage.Dispose();
             return result.ToImage<Bgr, Byte>();
         }
-        public Image<Bgr, Byte> Draw(Image<Bgr, Byte> modelImage, Image<Bgr, Byte> observedImage, List<KeyFrame> keyframes = null)
-        {
-            
-            //FindMatch(modelImage, observedImage, keyframes);
-            
-            Features2DToolbox.DrawMatches(modelImage, modelKeyPoints, observedImage, observedKeyPoints,
-               matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), mask, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
-            
-            #region draw the projected region on the image
-
-            if (homography != null)
-            {
-                //draw a rectangle along the projected model
-                Rectangle rect = new Rectangle(Point.Empty, modelImage.Size);
-                PointF[] pts = new PointF[]
-                {
-                    new PointF(rect.Left, rect.Bottom),
-                    new PointF(rect.Right, rect.Bottom),
-                    new PointF(rect.Right, rect.Top),
-                    new PointF(rect.Left, rect.Top)
-                };
-                //pts = CvInvoke.PerspectiveTransform(pts, homography);
-
-                Point[] points = Array.ConvertAll<PointF, Point>(pts, Point.Round);
-                using (VectorOfPoint vp = new VectorOfPoint(points))
-                {
-                    CvInvoke.Polylines(result, vp, true, new MCvScalar(255, 0, 0, 255), 5);
-                }
-
-            }
-
-            #endregion
-            //modelImage.Dispose();
-            return result.ToImage<Bgr,Byte>();            
-        }
+     
         public void Clear()
         {
             k                       = 2;

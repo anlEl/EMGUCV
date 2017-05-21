@@ -16,13 +16,17 @@ namespace EmguCVTest
     {
         public Dictionary<KeyFrame,Point> ContainerKeyFrames { get; set; }
         public object Obj { get; set; }
+        public ARObject()
+        {
+            ContainerKeyFrames = new Dictionary<KeyFrame, Point>();
+        }
     }
     public class KeyFrame
     {
         public Image<Bgr, Byte> Frame       { get; set; }
         public VectorOfKeyPoint KeyPoints   { get; set; }
         public Mat              Descriptors { get; set; }
-        public bool             IsContainItem { get; set; }
+        public List<ARObject>   Objects       { get; set; }
         public PointF[]         GetKeypointPoints()
         {
             PointF[] arr = new PointF[KeyPoints.Size];
@@ -30,12 +34,15 @@ namespace EmguCVTest
                 arr[i] = KeyPoints[i].Point;
             return arr;
         }
+        public KeyFrame()
+        {
+            Objects = new List<ARObject>();
+        }
     }
     class Program
     {
         static List<KeyFrame> keyFrames = new List<KeyFrame>();
-
-        static int counter = 0;
+        
         [STAThread]
         static void Main(string[] args)
         {
@@ -44,7 +51,7 @@ namespace EmguCVTest
                 Console.WriteLine("Choose a file");
                 OpenFileDialog OF = new OpenFileDialog();
                 OF.ShowDialog();
-                withKeyframes(OF.FileName);
+                process(OF.FileName);
             }
             catch (Exception ex)
             {
@@ -52,7 +59,7 @@ namespace EmguCVTest
             }
         }
         
-        private static void withKeyframes(string videoSource)
+        private static void process(string videoSource)
         {
             ImageViewer viewer = new ImageViewer();
             try
@@ -63,13 +70,14 @@ namespace EmguCVTest
 
                 Application.Idle += new EventHandler(delegate (object sender, EventArgs e)
                 {
-                    counter++;
+                IDrawer drawer = new SURFDrawer();
                     if (keyFrames.Count < 15)
                     {
-                        IDrawer drawer = new SURFDrawer();
                         try
                         {
-                            Mat frame = capture.QueryFrame();
+                            Mat frame = capture.QueryFrame();//Yeni frame'i al
+
+                            //Gerekli ise resize et (720*480)
                             if (frame.Width > 720 || frame.Height > 480)
                             {
                                 double width = 720.0 / frame.Width;
@@ -77,19 +85,26 @@ namespace EmguCVTest
 
                                 CvInvoke.Resize(frame, frame, new Size(), width, height, Inter.Linear);
                             }
-                            Image<Bgr, Byte> framebuffer = frame.ToImage<Bgr, Byte>();
-                            if (keyFrames.Count == 0)
+
+                            Image<Bgr, Byte> framebuffer = frame.ToImage<Bgr, Byte>();//frame'i kopyala
+
+                            if (keyFrames.Count == 0)//Başlangıç, hiç keyframe yok ise ilk fram'i keyframe yap
                                 keyFrames.Add(new KeyFrame() { Frame = framebuffer });
-                            for (int i = keyFrames.Count-1; i >=0; i--)
+
+                            for (int i = keyFrames.Count-1; i >=0; i--)//homography e bakarak frame herhangi bir keyframe ile uyuşmakta mı kontrolü
                             {
                                 KeyFrame kf = keyFrames[i];
                                 drawer.FindMatch(kf, framebuffer, keyFrames);
-                                if (counter == 65)
+                                
+                                //homography ile camera pozu ayarla, nesneyi koy
+                                
+                                if (drawer.homography != null)//Uygun bir keyframe var
                                 {
-                                    //homography ile camera pozu ayarla, nesneyi koy
-                                }
-                                if (drawer.homography != null)
-                                {
+                                    ///
+                                    /// Keyframelere sondan bakmaya başlıyoruz;
+                                    /// Çünkü görüntüde eşleşme olmazsa o frame keyframe olarak ekleniyor ve listenin son elemanı olarak ekleniyor
+                                    /// Eğer ki bulduğumuz keyframe listenin sonunda değil de daha önceden bulunan bir keyframe ise, onu liste sonuna taşıyoruz
+                                    ///
                                     KeyFrame buffer_kf = keyFrames[keyFrames.Count - 1];
                                     if (kf != buffer_kf)
                                     {
@@ -99,7 +114,7 @@ namespace EmguCVTest
                                     keyFrame = kf;
                                     break;
                                 }
-                                if (i == 0)
+                                if (i == 0)//Keyframe bulamamışsak o frame'i keyframe olarak ekliyoruz
                                 {
                                     if (drawer.homography == null)
                                         keyFrames.Add(new KeyFrame() { Frame = framebuffer, KeyPoints = drawer.observedKeyPoints, Descriptors = drawer.observedDescriptors });
