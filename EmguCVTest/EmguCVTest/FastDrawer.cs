@@ -83,9 +83,11 @@ namespace EmguCVTest
         {
 
             //FindMatch(modelImage, observedImage, keyframes);
-
-            Features2DToolbox.DrawMatches(keyFrame.Frame, keyFrame.KeyPoints, observedImage, observedKeyPoints,
-               matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), mask, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
+            if (matches.Size == mask.Rows)
+                Features2DToolbox.DrawMatches(keyFrame.Frame, keyFrame.KeyPoints, observedImage, observedKeyPoints, matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), mask, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
+            else
+                Features2DToolbox.DrawMatches(keyFrame.Frame, keyFrame.KeyPoints, observedImage, observedKeyPoints, matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), null, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
+            
 
             #region draw the projected region on the image
 
@@ -151,11 +153,9 @@ namespace EmguCVTest
         {
 
             //FindMatch(modelImage, observedImage,keyframes);
-
-            if (matches.Size == mask.Rows)
-                Features2DToolbox.DrawMatches(keyFrame.Frame, keyFrame.KeyPoints, observedImage, observedKeyPoints, matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), mask, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
-            else
-                Features2DToolbox.DrawMatches(keyFrame.Frame, keyFrame.KeyPoints, observedImage, observedKeyPoints, matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), null, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
+            
+            Features2DToolbox.DrawMatches(modelImage, modelKeyPoints, observedImage, observedKeyPoints, matches, result, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), mask, Features2DToolbox.KeypointDrawType.NotDrawSinglePoints);
+           
             #region draw the projected region on the image
             if (homography != null)
             {
